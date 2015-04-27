@@ -44,8 +44,6 @@ function if_auto_decrypt(cb) {
     chrome.storage.sync.get({
         autoDecrypt: true
     }, function(items) {
-        console.log("AUTO-DECRYPT ITEMS", items);
-        console.log("AUTO-DECRYPT", items.autoDecrypt);
         if (items.autoDecrypt) {
             cb();
         }
