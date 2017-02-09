@@ -19,7 +19,13 @@
 
    "content_scripts": [ {
       "css": [ "extern/jquery-ui.custom/jquery-ui.min.css" ],
-      "js": [ "extern/jquery-2.1.3.min.js", "extern/jquery-ui.custom/jquery-ui.min.js", "common.js", "github.js" ],
+      "js": [
+         "extern/jquery-2.1.3.min.js",
+         "extern/jquery-ui.custom/jquery-ui.min.js",
+         "extern/diff/diff-3.2.0.min.js",
+         "common.js",
+         "github.js"
+      ],
       "matches": [ "https://www.github.com/*", "https://github.com/*" ]
    } ],
 
