@@ -1,181 +1,264 @@
 // Code that's specific to Github
 
-var GH = {
-    // scan the page to find an ecrypted vault
-    scan: function() {
-        GH.scanSingleFileBlob();
-        GH.scanCommitPR();
-    },
+const ADD = 'addition';
+const DELETE = 'deletion';
+const NONE = 'none';
 
-    sanitize: function(node) {
-        return node.text().trim().replace(/\s/g, '');
-    },
+// See https://gist.github.com/samgiles/762ee337dff48623e729
+// [B](f: (A) ⇒ [B]): [B]  ; Although the types in the arrays aren't strict (:
+Array.prototype.flatMap = function(lambda) {
+  return Array.prototype.concat.apply([], this.map(lambda));
+};
 
-    diffText: function(before, after) {
-        return before;
-    },
+function sanitize(node) {
+  return node.text().trim().replace(/\s/g, '');
+}
 
-    // VERY HACKY, any changes in GitHub will likely break this...
-    // We're assuming a diff on vault file will have following format:
-    //
-    // $ANSIBLE_VAULT;1.1;AES256
-    // -
-    // - ALL THE OLD STUFF
-    // -
-    // +
-    // + ALL THE NEW STUFF
-    // +
-    //
-    // In particular, that the header (first line) will remain the same but the entire rest of the file will diff.
-    scanCommitPR: function() {
-        var diffs = $('#files .file.js-file');
+class BlobLine {
+  constructor(idx, text) {
+    this.idx = idx;
+    this.text = text.replace(/ /g, "&nbsp;");
+  }
 
-        $.each(diffs, function(idx, diff) {
-            var context = $(diff).find('.blob-code-context:first').text().trim();
+  renderHtml() {
+    return (
+      '<tr>' +
+        '<td id="L' + this.idx + '" class="blob-num js-line-number" data-line-number="' + this.idx + '"></td>' +
+        '<td id="LC' + this.idx + '" class="blob-code blob-code-inner js-file-line">' + this.text + '</td>' +
+      '</tr>'
+    );
+  }
+}
 
-            if (context === "$ANSIBLE_VAULT;1.1;AES256") {
-                var container = $(diff).find('table.diff-table');
-                var deletions = GH.sanitize($(diff).find('.blob-code-deletion')).replace(/-/g, '');
-                var additions = GH.sanitize($(diff).find('.blob-code-addition')).replace(/\+/g, '');
+class Blob {
+  constructor(blobLines) {
+    this.blobLines = blobLines;
+  }
 
-                GH.do_decrypt(deletions, null, false, function(deletionsDecrypted) {
-                    GH.do_decrypt(additions, null, false, function(additionsDecrypted) {
-                        // See https://github.com/kpdecker/jsdiff#change-objects
-                        var diffObjects = JsDiff.diffLines(deletionsDecrypted, additionsDecrypted);
-                        var diffLines = $.map(diffObjects, function(diffObject) {
-                            if (diffObject.added) {
-                                var addBlob = diffObject.value.split('\n').map(function(line) {
-                                    return "<td class=blob-code-addition>+ " + line + "</td>";
-                                }).join('\n');
-                                console.log("ADD: '" + addBlob + "'");
-                                return addBlob;
-                            } else if (diffObject.removed) {
-                                var removeBlob = diffObject.value.split('\n').map(function(line) {
-                                    return "<td class=blob-code-deletion>- " + line + "</td>";
-                                }).join('\n');
-                                console.log("DELETE: '" + removeBlob + "'");
-                                return removeBlob;
-                            } else {
-                                return diffObject.value;
-                            }
-                        });
+  static compute(lines) {
+    const blobLines = lines.split('\n').map((line, idx) => { return new BlobLine(idx, line) });
+    return new Blob(blobLines);
+  }
 
-                        console.log("RESULT: " + diffLines);
-                        GH.displayDiffDecoded(diffLines.join('\n'), container);
-                    });
-                });
+  static detect() {
+    const header = $('.blob-code:first').text();
 
-            }
+    if (header.match(/^\$ANSIBLE_VAULT;.+AES256$/) && !$('#decryptbtn').length) {
+      const container = $('.js-file-line-container');
+      const original = container.html();
+      const textToDecrypt = $('.blob-code').not(':first').text();
+
+      // attempt to auto-decrypt if auto-decrypt enabled
+      if_auto_decrypt(function() {
+        // don't prompt the user for a password on auto-decrypt
+        GH.do_decrypt(textToDecrypt, null, false, function(text) {
+          Blob.compute(text).show(container);
         });
-    },
+      });
 
-    displayDiffDecoded: function(text, container) {
-        container.html(text);
-    },
+      // Github love to rename their css classes, so this code has to try to be a little resilient to that..
+      // will probably still fail anyway on a regular basis
+      //
+      const raw_url = $('#raw-url');
+      const btn_group = raw_url.parent();
+      const btn_class = raw_url.attr('class');
 
-    scanSingleFileBlob: function() {
-        var header = $('.blob-code:first').text();
-        var original = null;
+      if (btn_group) {
+        $('<a class="minibutton" id="decryptbtn">Decrypt</a>').prependTo(btn_group).click(function() {
+          GH.do_decrypt(textToDecrypt, null, true, text => { Blob.compute(text).show(container); });
+        }).attr('class', btn_class);
 
-        if (header.match(/^\$ANSIBLE_VAULT;.+AES256$/) && !$('#decryptbtn').length) {
-            var textToDecrypt = $('.blob-code').not(':first').text();
-            var container = $('.js-file-line-container');
-            original = container.html();
+        $('<a class="minibutton" id="undecryptbtn">Original</a>').prependTo(btn_group).click(function() {
+          $(this).hide();
+          $('#decryptbtn').show();
+          container.html(original);
+        }).attr('class', btn_class).hide();
+      }
 
-            // attempt to auto-decrypt if auto-decrypt enabled
-            if_auto_decrypt(function() {
-                // don't prompt the user for a password on auto-decrypt
-                GH.do_decrypt(textToDecrypt, null, false, function(text) { GH.displayBlobDecoded(text, container) });
+      $('.file-info').append('<span class="file-info-divider"></span><span>Encrypted Ansible Vault</span>');
+    }
+  }
+
+  renderHtml() {
+    return this.blobLines.map(bl => bl.renderHtml()).join('\n');
+  }
+
+  show(container) {
+    $('#decryptbtn').hide();
+    $('#undecryptbtn').show();
+    container.html(this.renderHtml());
+  }
+}
+
+
+class DiffLine {
+  constructor(idx, type, text) {
+    this.idx = idx;
+    this.type = type;
+    this.text = text.replace(/ /g, "&nbsp;");
+  }
+
+  renderHtml() {
+    if (this.type === ADD) {
+      return (
+        '<tr>' +
+          '<td class="blob-num blob-num-addition empty-cell"></td>' +
+          '<td id="R' + this.idx + '" class="blob-num blob-num-addition js-linkable-line-number" data-line-number="' + this.idx + '"></td>' +
+          '<td class="blob-code blob-code-addition blob-code-inner">+ ' + this.text + '</td>' +
+        '</tr>'
+      );
+    } else if (this.type === DELETE) {
+      return (
+        '<tr>' +
+          '<td id="L' + this.idx + '" class="blob-num blob-num-deletion js-linkable-line-number" data-line-number="' + this.idx + '"></td>' +
+          '<td class="blob-num blob-num-deletion empty-cell"></td>' +
+          '<td class="blob-code blob-code-deletion blob-code-inner">- ' + this.text + '</td>' +
+        '</tr>'
+      );
+    } else {    // NONE
+      return (
+        '<tr>' +
+          '<td id="L' + this.idx + '" class="blob-num blob-num-context js-linkable-line-number" data-line-number="' + this.idx + '"></td>' +
+          '<td id="R' + this.idx + '" class="blob-num blob-num-context js-linkable-line-number" data-line-number="' + this.idx + '"></td>' +
+          '<td id="LC' + this.idx + '" class="blob-code blob-code-inner">' + this.text + '</td>' +
+        '</tr>'
+      );
+    }
+  }
+}
+
+// See https://github.com/kpdecker/jsdiff#change-objects
+class Diff {
+  constructor(diffLines) {
+    this.diffLines = diffLines;
+  }
+
+  static compute(removed, added) {
+    const diffObjs = JsDiff.diffLines(removed, added);
+    let idx = 0;
+    const diffLines = diffObjs.flatMap(diffObj => {
+      let type;
+      if (diffObj.added) {
+        type = ADD;
+      } else if (diffObj.removed) {
+        type = DELETE;
+      } else {
+        type = NONE;
+      }
+      const diffObjLines = diffObj.value.split('\n');
+      const result = diffObjLines.map((l,i) => new DiffLine(idx+i, type, l));
+      idx += diffObjLines.length;
+      return result;
+    });
+    console.log(diffLines);
+    return new Diff(diffLines);
+  }
+
+  // VERY HACKY, any changes in GitHub will likely break this...
+  // We're assuming a diff on vault file will have following format:
+  //
+  // $ANSIBLE_VAULT;1.1;AES256
+  // -
+  // - ALL THE OLD STUFF
+  // -
+  // +
+  // + ALL THE NEW STUFF
+  // +
+  //
+  // In particular, that the header (first line) will remain the same but the entire rest of the file will be removals
+  // followed by additions.
+  static detect() {
+    const diffs = $('#files .file.js-file');
+
+    $.each(diffs, (idx,diff) => {
+      const context = $(diff).find('.blob-code-context:first').text().trim();
+
+      if (context === "$ANSIBLE_VAULT;1.1;AES256") {
+        const container = $(diff).find('table.diff-table');
+        const original = container.html();
+        const deletions = sanitize($(diff).find('.blob-code-deletion')).replace(/-/g, '');
+        const additions = sanitize($(diff).find('.blob-code-addition')).replace(/\+/g, '');
+
+        // // attempt to auto-decrypt if auto-decrypt enabled
+        if_auto_decrypt(function() {
+          // don't prompt the user for a password on auto-decrypt
+          GH.do_decrypt(deletions, null, false, deletionsDecrypted => {
+            GH.do_decrypt(additions, null, false, additionsDecrypted => {
+              Diff.compute(deletionsDecrypted, additionsDecrypted).show(container);
             });
+          });
+        });
 
-            // Github love to rename their css classes, so this code has to try to be a little resilient to that..
-            // will probably still fail anyway on a regular basis
-            //
-            var $btn_group = $('#raw-url').parent();
-            var btn_class = $('#raw-url').attr('class');
+        GH.do_decrypt(deletions, null, true, deletionsDecrypted => {
+          GH.do_decrypt(additions, null, true, additionsDecrypted => {
+            Diff.compute(deletionsDecrypted, additionsDecrypted).show(container);
+          });
+        });
+      }
+    });
+  }
 
-            if ($btn_group) {
-                $('<a class="minibutton" id="decryptbtn">Decrypt</a>').prependTo($btn_group).click(function() {
-                    GH.do_decrypt(textToDecrypt, null, true, function(text) { GH.displayBlobDecoded(text, container) });
-                }).attr('class', btn_class);
+  renderHtml() {
+    console.log(this.diffLines);
+    return this.diffLines.map(dl => dl.renderHtml()).join('\n');
+  }
 
-                $('<a class="minibutton" id="undecryptbtn">Original</a>').prependTo($btn_group).click(function() {
-                    $(this).hide();
-                    $('#decryptbtn').show();
-                    container.html(original);
-                }).attr('class', btn_class).hide();
-            }
+  show(container) {
+    container.html(this.renderHtml());
+  }
+}
 
-            $('.file-info').append('<span class="file-info-divider"></span><span>Encrypted Ansible Vault</span>');
+
+const GH = {
+  // scan the page to find an ecrypted vault
+  scan: function() {
+    Blob.detect();
+    Diff.detect();
+  },
+
+  handleResponse: function(textToDecrypt, response, prompt_on_fail, callback) {
+    switch (response.code) {
+      case "ok":
+        callback(response.text);
+        break;
+      case "bad_password":
+        if (prompt_on_fail) {
+          GH.prompt_and_decrypt(textToDecrypt, callback);
         }
-    },
-
-    handleResponse: function(textToDecrypt, response, prompt_on_fail, callback) {
-        switch (response.code) {
-            case "ok":
-                callback(response.text);
-                break;
-            case "bad_password":
-                if (prompt_on_fail) {
-                    GH.prompt_and_decrypt(textToDecrypt, callback);
-                }
-                break;
-            default:
-                if (prompt_on_fail) {
-                    display_error(response.error);
-                }
+        break;
+      default:
+        if (prompt_on_fail) {
+          display_error(response.error);
         }
-    },
+    }
+  },
 
-    displayBlobDecoded: function(text, container) {
-        $('#decryptbtn').hide();
-        $('#undecryptbtn').show();
+  prompt_and_decrypt: function(textToDecrypt, callback) {
+    prompt_password(function(pw) {
+      GH.do_decrypt(textToDecrypt, pw, true, callback);
+    });
+  },
 
-        var lines = text.split("\n");
-        var rows = [];
-        $.each(lines, function(i) {
-            var j = i + 1;
-            rows.push(
-                '<tr>' +
-                '<td id="L' + j + '" class="blob-num js-line-number" data-line-number="' + j + '"></td>' +
-                '<td id="LC' + j + '" class="blob-code js-file-line"></td>' +
-                '</tr>'
-            );
-        });
-
-        container.html(rows.join("\n"));
-        $.each(lines, function(i, line) {
-            var j = i + 1;
-            $('#LC' + j).html(line.replace(/ /g, "&nbsp;"));
-        });
-    },
-
-    prompt_and_decrypt: function(textToDecrypt, callback) {
-        prompt_password(function(pw) {
-            GH.do_decrypt(textToDecrypt, pw, true, callback);
-        });
-    },
-
-    do_decrypt: function(textToDecrypt, password, prompt_on_fail, callback) {
-        chrome.runtime.sendMessage({
-            op: 'decrypt',
-            alg: 'VaultAES256',
-            data: textToDecrypt,
-            password: password
-        }, function(response) {
-            GH.handleResponse(textToDecrypt, response, prompt_on_fail, callback);
-        });
-    },
+  do_decrypt: function(textToDecrypt, password, prompt_on_fail, callback) {
+    chrome.runtime.sendMessage({
+      op: 'decrypt',
+      alg: 'VaultAES256',
+      data: textToDecrypt,
+      password: password
+    }, function(response) {
+      GH.handleResponse(textToDecrypt, response, prompt_on_fail, callback);
+    });
+  },
 };
 
 
 // Github dynamically loads page fragments when switching between blobs instead of doing
 // a full page load.  Make sure we catch those.
-var observer = new MutationObserver(GH.scan);
+const observer = new MutationObserver(GH.scan);
 
 observer.observe($('#js-repo-pjax-container')[0], {
-    childList: true,
-    subtree: true,
+  childList: true,
+  subtree: true,
 });
 
 // Do a scan on page load.
