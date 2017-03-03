@@ -145,12 +145,15 @@ class Diff {
       } else {
         type = NONE;
       }
-      const diffObjLines = diffObj.value.split('\n');
-      const result = diffObjLines.map((l,i) => new DiffLine(idx+i, type, l));
+      let diffObjLines = diffObj.value.split('\n');
+      // split causes us to have an extra empty line at the end
+      if (diffObjLines[diffObjLines.length-1].length === 0) {
+        diffObjLines = diffObjLines.slice(0, -1);
+      }
+      const result = diffObjLines.map((l,i) => { return new DiffLine(idx+i, type, l) });
       idx += diffObjLines.length;
       return result;
     });
-    console.log(diffLines);
     return new Diff(diffLines);
   }
 
@@ -199,7 +202,6 @@ class Diff {
   }
 
   renderHtml() {
-    console.log(this.diffLines);
     return this.diffLines.map(dl => dl.renderHtml()).join('\n');
   }
 
