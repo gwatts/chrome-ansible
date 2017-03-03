@@ -41,19 +41,36 @@ var GH = {
                 GH.do_decrypt(deletions, null, false, function(deletionsDecrypted) {
                     GH.do_decrypt(additions, null, false, function(additionsDecrypted) {
                         // See https://github.com/kpdecker/jsdiff#change-objects
-                        var diff = JsDiff.diffLines(deletionsDecrypted, additionsDecrypted);
-                        var diffLines = $.map(diff, function(changeObject) {
-                            if (changeObject.added) { return "+" + changeObject.value; }
-                            else if (changeObject.removed) { return "-" + changeObject.value; }
-                            else { return changeObject.value; }
+                        var diffObjects = JsDiff.diffLines(deletionsDecrypted, additionsDecrypted);
+                        var diffLines = $.map(diffObjects, function(diffObject) {
+                            if (diffObject.added) {
+                                var addBlob = diffObject.value.split('\n').map(function(line) {
+                                    return "<td class=blob-code-addition>+ " + line + "</td>";
+                                }).join('\n');
+                                console.log("ADD: '" + addBlob + "'");
+                                return addBlob;
+                            } else if (diffObject.removed) {
+                                var removeBlob = diffObject.value.split('\n').map(function(line) {
+                                    return "<td class=blob-code-deletion>- " + line + "</td>";
+                                }).join('\n');
+                                console.log("DELETE: '" + removeBlob + "'");
+                                return removeBlob;
+                            } else {
+                                return diffObject.value;
+                            }
                         });
 
-                        GH.display_decoded(diffLines.join('\n'), container);
+                        console.log("RESULT: " + diffLines);
+                        GH.displayDiffDecoded(diffLines.join('\n'), container);
                     });
                 });
 
             }
         });
+    },
+
+    displayDiffDecoded: function(text, container) {
+        container.html(text);
     },
 
     scanSingleFileBlob: function() {
@@ -68,7 +85,7 @@ var GH = {
             // attempt to auto-decrypt if auto-decrypt enabled
             if_auto_decrypt(function() {
                 // don't prompt the user for a password on auto-decrypt
-                GH.do_decrypt(textToDecrypt, null, false, function(text) { GH.display_decoded(text, container) });
+                GH.do_decrypt(textToDecrypt, null, false, function(text) { GH.displayBlobDecoded(text, container) });
             });
 
             // Github love to rename their css classes, so this code has to try to be a little resilient to that..
@@ -79,7 +96,7 @@ var GH = {
 
             if ($btn_group) {
                 $('<a class="minibutton" id="decryptbtn">Decrypt</a>').prependTo($btn_group).click(function() {
-                    GH.do_decrypt(textToDecrypt, null, true, function(text) { GH.display_decoded(text, container) });
+                    GH.do_decrypt(textToDecrypt, null, true, function(text) { GH.displayBlobDecoded(text, container) });
                 }).attr('class', btn_class);
 
                 $('<a class="minibutton" id="undecryptbtn">Original</a>').prependTo($btn_group).click(function() {
@@ -110,7 +127,7 @@ var GH = {
         }
     },
 
-    display_decoded: function(text, container) {
+    displayBlobDecoded: function(text, container) {
         $('#decryptbtn').hide();
         $('#undecryptbtn').show();
 
