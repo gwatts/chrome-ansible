@@ -59,3 +59,37 @@ Array.prototype.flatMap = function(lambda) {
 function sanitize(node) {
     return node.text().trim().replace(/\s/g, '');
 }
+
+function handle_response(textToDecrypt, response, prompt_on_fail, callback) {
+  switch (response.code) {
+    case "ok":
+      callback(response.text);
+      break;
+    case "bad_password":
+      if (prompt_on_fail) {
+        prompt_and_decrypt(textToDecrypt, callback);
+      }
+      break;
+    default:
+      if (prompt_on_fail) {
+        display_error(response.error);
+      }
+  }
+}
+
+function prompt_and_decrypt(textToDecrypt, callback) {
+  prompt_password(function(pw) {
+    do_decrypt(textToDecrypt, pw, true, callback);
+  });
+}
+
+function do_decrypt(textToDecrypt, password, prompt_on_fail, callback) {
+  chrome.runtime.sendMessage({
+    op: 'decrypt',
+    alg: 'VaultAES256',
+    data: textToDecrypt,
+    password: password
+  }, function(response) {
+    handle_response(textToDecrypt, response, prompt_on_fail, callback);
+  });
+}
