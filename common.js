@@ -49,3 +49,13 @@ function if_auto_decrypt(cb) {
         }
     });
 }
+
+// See https://gist.github.com/samgiles/762ee337dff48623e729
+// [B](f: (A) ⇒ [B]): [B]  ; Although the types in the arrays aren't strict (:
+Array.prototype.flatMap = function(lambda) {
+    return Array.prototype.concat.apply([], this.map(lambda));
+};
+
+function sanitize(node) {
+    return node.text().trim().replace(/\s/g, '');
+}

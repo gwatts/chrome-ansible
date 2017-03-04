@@ -4,31 +4,66 @@ const ADD = 'addition';
 const DELETE = 'deletion';
 const NONE = 'none';
 
-// See https://gist.github.com/samgiles/762ee337dff48623e729
-// [B](f: (A) ⇒ [B]): [B]  ; Although the types in the arrays aren't strict (:
-Array.prototype.flatMap = function(lambda) {
-  return Array.prototype.concat.apply([], this.map(lambda));
-};
-
-function sanitize(node) {
-  return node.text().trim().replace(/\s/g, '');
-}
-
 class BlobLine {
   constructor(idx, text) {
-    this.idx = idx;
+    this.lineNumber = idx;
     this.text = text.replace(/ /g, "&nbsp;");
   }
 
   renderHtml() {
-    return (
-      '<tr>' +
-        '<td id="L' + this.idx + '" class="blob-num js-line-number" data-line-number="' + this.idx + '"></td>' +
-        '<td id="LC' + this.idx + '" class="blob-code blob-code-inner js-file-line">' + this.text + '</td>' +
-      '</tr>'
-    );
+    return `
+      <tr>
+        <td id="L${this.lineNumber}" class="blob-num js-line-number" data-line-number="${this.lineNumber}"></td>
+        <td id="LC${this.lineNumber}" class="blob-code blob-code-inner js-file-line">${this.text}</td>
+      </tr>
+    `;
   }
 }
+
+class DiffLine {
+  constructor(fileName, fileAnchor, lineNumber, type, text) {
+    this.fileName = fileName;
+    this.fileAnchor = fileAnchor;
+    this.lineNumber = lineNumber;
+    this.type = type;
+    this.text = text.replace(/ /g, "&nbsp;");
+  }
+
+  renderHtml() {
+    if (this.type === ADD) {
+      return `
+        <tr>
+          <td class="blob-num blob-num-addition empty-cell"></td>
+          <td id="${this.fileAnchor}R${this.lineNumber}" class="blob-num blob-num-addition js-linkable-line-number" data-line-number="${this.lineNumber}"></td>
+          <td class="blob-code blob-code-addition">
+            <span class="blob-code-inner">+ ${this.text}</span>
+          </td>
+        </tr>
+      `;
+    } else if (this.type === DELETE) {
+      return `
+        <tr>
+          <td id="${this.fileAnchor}L${this.lineNumber}" class="blob-num blob-num-deletion js-linkable-line-number" data-line-number="${this.lineNumber}"></td>
+          <td class="blob-num blob-num-deletion empty-cell"></td>
+          <td class="blob-code blob-code-deletion">
+            <span class="blob-code-inner">- ${this.text}</span>
+          </td>
+        </tr>
+      `;
+    } else {    // NONE
+      return `
+        <tr>
+          <td id="${this.fileAnchor}L${this.lineNumber}" class="blob-num blob-num-context js-linkable-line-number" data-line-number="${this.lineNumber}"></td>
+          <td id="${this.fileAnchor}R${this.lineNumber}" class="blob-num blob-num-context js-linkable-line-number" data-line-number="${this.lineNumber}"></td>
+          <td class="blob-code blob-code-context">
+            <span class="blob-code-inner">${this.text}</span>
+          </td>
+        </tr>
+      `;
+    }
+  }
+}
+
 
 class Blob {
   constructor(blobLines) {
@@ -90,52 +125,16 @@ class Blob {
   }
 }
 
-
-class DiffLine {
-  constructor(idx, type, text) {
-    this.idx = idx;
-    this.type = type;
-    this.text = text.replace(/ /g, "&nbsp;");
-  }
-
-  renderHtml() {
-    if (this.type === ADD) {
-      return (
-        '<tr>' +
-          '<td class="blob-num blob-num-addition empty-cell"></td>' +
-          '<td id="R' + this.idx + '" class="blob-num blob-num-addition js-linkable-line-number" data-line-number="' + this.idx + '"></td>' +
-          '<td class="blob-code blob-code-addition blob-code-inner">+ ' + this.text + '</td>' +
-        '</tr>'
-      );
-    } else if (this.type === DELETE) {
-      return (
-        '<tr>' +
-          '<td id="L' + this.idx + '" class="blob-num blob-num-deletion js-linkable-line-number" data-line-number="' + this.idx + '"></td>' +
-          '<td class="blob-num blob-num-deletion empty-cell"></td>' +
-          '<td class="blob-code blob-code-deletion blob-code-inner">- ' + this.text + '</td>' +
-        '</tr>'
-      );
-    } else {    // NONE
-      return (
-        '<tr>' +
-          '<td id="L' + this.idx + '" class="blob-num blob-num-context js-linkable-line-number" data-line-number="' + this.idx + '"></td>' +
-          '<td id="R' + this.idx + '" class="blob-num blob-num-context js-linkable-line-number" data-line-number="' + this.idx + '"></td>' +
-          '<td id="LC' + this.idx + '" class="blob-code blob-code-inner">' + this.text + '</td>' +
-        '</tr>'
-      );
-    }
-  }
-}
-
 // See https://github.com/kpdecker/jsdiff#change-objects
 class Diff {
-  constructor(diffLines) {
+  constructor(fileAnchor, diffLines) {
+    this.fileAnchor = fileAnchor;
     this.diffLines = diffLines;
   }
 
-  static compute(removed, added) {
+  static compute(fileName, fileAnchor, removed, added) {
     const diffObjs = JsDiff.diffLines(removed, added);
-    let idx = 0;
+    let lineNumber = 0;
     const diffLines = diffObjs.flatMap(diffObj => {
       let type;
       if (diffObj.added) {
@@ -150,53 +149,62 @@ class Diff {
       if (diffObjLines[diffObjLines.length-1].length === 0) {
         diffObjLines = diffObjLines.slice(0, -1);
       }
-      const result = diffObjLines.map((l,i) => { return new DiffLine(idx+i, type, l) });
-      idx += diffObjLines.length;
+      const result = diffObjLines.map((l,i) => { return new DiffLine(fileName, fileAnchor, lineNumber+i, type, l) });
+      lineNumber += diffObjLines.length;
       return result;
     });
-    return new Diff(diffLines);
+    return new Diff(fileAnchor, diffLines);
   }
 
-  // VERY HACKY, any changes in GitHub will likely break this...
   // We're assuming a diff on vault file will have following format:
   //
-  // $ANSIBLE_VAULT;1.1;AES256
-  // -
-  // - ALL THE OLD STUFF
-  // -
-  // +
-  // + ALL THE NEW STUFF
-  // +
+  // $ANSIBLE_VAULT;1.1;AES256          (ansible vault header)
+  // - DELETIONS                        (all the deletions)
+  // + ADDITIONS                        (all the additions)
   //
-  // In particular, that the header (first line) will remain the same but the entire rest of the file will be removals
-  // followed by additions.
   static detect() {
-    const diffs = $('#files .file.js-file');
+    const files = $('#files .file.js-file');
+    console.log('XX detect');
 
-    $.each(diffs, (idx,diff) => {
-      const context = $(diff).find('.blob-code-context:first').text().trim();
+    $.each(files, (idx,file) => {
+      const context = $(file).find('.blob-code-context:first').text().trim();
+      const fileHeader = $(file).find('.file-header');
+      const fileName = $(fileHeader).attr('data-path');
+      const fileAnchor = $(fileHeader).attr('data-anchor');
 
-      if (context === "$ANSIBLE_VAULT;1.1;AES256") {
-        const container = $(diff).find('table.diff-table');
+      if (context === "$ANSIBLE_VAULT;1.1;AES256" && !$('#' + fileAnchor + '-decryptbtn').length) {
+        const container = $(file).find('table.diff-table');
         const original = container.html();
-        const deletions = sanitize($(diff).find('.blob-code-deletion')).replace(/-/g, '');
-        const additions = sanitize($(diff).find('.blob-code-addition')).replace(/\+/g, '');
+        const deletions = sanitize($(file).find('.blob-code-deletion')).replace(/-/g, '');
+        const additions = sanitize($(file).find('.blob-code-addition')).replace(/\+/g, '');
 
         // // attempt to auto-decrypt if auto-decrypt enabled
         if_auto_decrypt(function() {
           // don't prompt the user for a password on auto-decrypt
           GH.do_decrypt(deletions, null, false, deletionsDecrypted => {
             GH.do_decrypt(additions, null, false, additionsDecrypted => {
-              Diff.compute(deletionsDecrypted, additionsDecrypted).show(container);
+              Diff.compute(fileName, fileAnchor, deletionsDecrypted, additionsDecrypted).show(container);
             });
           });
         });
 
-        GH.do_decrypt(deletions, null, true, deletionsDecrypted => {
-          GH.do_decrypt(additions, null, true, additionsDecrypted => {
-            Diff.compute(deletionsDecrypted, additionsDecrypted).show(container);
+        const actions = $(file).find('.file-actions').first();
+
+        if (actions) {
+          $('<a class="minibutton btn btn-sm" id="' + fileAnchor + '-decryptbtn">Decrypt</a>').prependTo(actions).click(function() {
+            GH.do_decrypt(deletions, null, true, deletionsDecrypted => {
+              GH.do_decrypt(additions, null, true, additionsDecrypted => {
+                Diff.compute(fileName, fileAnchor, deletionsDecrypted, additionsDecrypted).show(container);
+              });
+            });
           });
-        });
+
+          $('<a class="minibutton btn btn-sm" id="' + fileAnchor + '-undecryptbtn">Original</a>').prependTo(actions).click(function() {
+            $(this).hide();
+            $('#' + fileAnchor + '-decryptbtn').show();
+            container.html(original);
+          }).hide();
+        }
       }
     });
   }
@@ -206,6 +214,8 @@ class Diff {
   }
 
   show(container) {
+    $('#' + this.fileAnchor + '-decryptbtn').hide();
+    $('#' + this.fileAnchor + '-undecryptbtn').show();
     container.html(this.renderHtml());
   }
 }
