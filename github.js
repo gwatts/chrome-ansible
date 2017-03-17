@@ -136,7 +136,7 @@ GitHub.Diff = class {
   }
 
   static compute(file_name, file_anchor, removed, added) {
-    const diff_objs = JsDiff.diff_lines(removed, added);
+    const diff_objs = JsDiff.diff_lines(removed.trim(), added.trim());
     let line_number = 0;
     const diff_lines = diff_objs.avd_flatmap(diff_obj => {
       let type;
