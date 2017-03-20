@@ -26,7 +26,7 @@ GitHub.Blob = class {
   }
 
   static compute(lines) {
-    const blob_lines = lines.split('\n').map((line, idx) => { return new GitHub.BlobLine(idx, line) });
+    const blob_lines = lines.trim().split('\n').map((line, idx) => { return new GitHub.BlobLine(idx, line) });
     return new GitHub.Blob(blob_lines);
   }
 
