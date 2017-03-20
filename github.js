@@ -126,7 +126,7 @@ GitHub.DiffLine = class {
       }
     }
   }
-}
+};
 
 // See https://github.com/kpdecker/jsdiff#change-objects
 GitHub.Diff = class {
