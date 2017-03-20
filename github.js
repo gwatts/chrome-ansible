@@ -97,7 +97,7 @@ GitHub.DiffLine = class {
             <td class="blob-num blob-num-addition empty-cell"></td>
             <td id="${this.file_anchor}R${this.line_number}" class="blob-num blob-num-addition js-linkable-line-number" data-line-number="${this.line_number}"></td>
             <td class="blob-code blob-code-addition">
-              <span class="blob-code-inner">+ ${this.text}</span>
+              <span class="blob-code-inner">+${this.text}</span>
             </td>
           </tr>
         `;
@@ -108,7 +108,7 @@ GitHub.DiffLine = class {
             <td id="${this.file_anchor}L${this.line_number}" class="blob-num blob-num-deletion js-linkable-line-number" data-line-number="${this.line_number}"></td>
             <td class="blob-num blob-num-deletion empty-cell"></td>
             <td class="blob-code blob-code-deletion">
-              <span class="blob-code-inner">- ${this.text}</span>
+              <span class="blob-code-inner">-${this.text}</span>
             </td>
           </tr>
         `;
@@ -119,7 +119,7 @@ GitHub.DiffLine = class {
             <td id="${this.file_anchor}L${this.line_number}" class="blob-num blob-num-context js-linkable-line-number" data-line-number="${this.line_number}"></td>
             <td id="${this.file_anchor}R${this.line_number}" class="blob-num blob-num-context js-linkable-line-number" data-line-number="${this.line_number}"></td>
             <td class="blob-code blob-code-context">
-              <span class="blob-code-inner">${this.text}</span>
+              <span class="blob-code-inner"> ${this.text}</span>
             </td>
           </tr>
         `;
