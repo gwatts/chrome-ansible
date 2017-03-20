@@ -24,8 +24,6 @@
          "extern/jquery-ui.custom/jquery-ui.min.js",
          "extern/diff/diff-3.2.0.min.js",
          "common.js",
-         "github-blob.js",
-         "github-diff.js",
          "github.js"
       ],
       "matches": [ "https://www.github.com/*", "https://github.com/*" ]
