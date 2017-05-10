@@ -50,10 +50,6 @@ let AnsibleVaultDecryptor = {
     });
   },
 
-  sanitize: function(node) {
-    return node.text().trim().replace(/\s/g, '');
-  },
-
   handle_response: function(textToDecrypt, response, prompt_on_fail, callback) {
     switch (response.code) {
       case "ok":
@@ -76,14 +72,18 @@ let AnsibleVaultDecryptor = {
   },
 
   do_decrypt: function(textToDecrypt, password, prompt_on_fail, callback) {
-    chrome.runtime.sendMessage({
-      op: 'decrypt',
-      alg: 'VaultAES256',
-      data: textToDecrypt,
-      password: password
-    }, response => {
-      this.handle_response(textToDecrypt, response, prompt_on_fail, callback);
-    });
+    if (textToDecrypt.length === 0) {
+      callback(textToDecrypt);
+    } else {
+      chrome.runtime.sendMessage({
+        op: 'decrypt',
+        alg: 'VaultAES256',
+        data: textToDecrypt,
+        password: password
+      }, response => {
+        this.handle_response(textToDecrypt, response, prompt_on_fail, callback);
+      });
+    }
   },
 };
 
