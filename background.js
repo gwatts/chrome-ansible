@@ -49,7 +49,8 @@ Ansible.VaultAES256 = {
         var v256 = Ansible.VaultAES256,
             fromHex = sjcl.codec.hex.toBits,
             toUtf8 = sjcl.codec.utf8String.fromBits,
-            parts, salt, crypted_hmac, crypted_data, hmac, k, aes, result;
+            parts, salt, crypted_hmac, crypted_data, hmac, k, aes, result,
+            data, pad_len;
 
         try {
             data = toUtf8(fromHex(data.replace(/[^0-9a-fA-F]+/m, '')));
@@ -84,8 +85,14 @@ Ansible.VaultAES256 = {
 
         aes = new sjcl.cipher.aes(k.key1);
         result = sjcl.mode.ctr.decrypt(aes, crypted_data, k.iv);
+
+        // remove padding
+        data = toUtf8(result.data);
+        pad_len = data.charCodeAt(data.length-1);
+        data = data.substring(0, data.length - pad_len);
+
         return {
-            text: toUtf8(result.data),
+            text: data,
             code: 'ok'
         };
     }

@@ -26,7 +26,7 @@ GitHub.Blob = class {
   }
 
   static compute(lines) {
-    const blob_lines = lines.split('\n').map((line, idx) => { return new GitHub.BlobLine(idx, line) });
+    const blob_lines = lines.trim().split('\n').map((line, idx) => { return new GitHub.BlobLine(idx, line) });
     return new GitHub.Blob(blob_lines);
   }
 
@@ -159,6 +159,10 @@ GitHub.Diff = class {
     return new GitHub.Diff(file_anchor, diff_lines);
   }
 
+  static _readLines(node, prefix) {
+    return node.text().trim().replace(/\s/g, '').replace(prefix, '').replace(/\$ANSIBLE_VAULT;.+AES256/, '');
+  }
+
   // We're assuming a diff on vault file will have following format:
   //
   // $ANSIBLE_VAULT;1.1;AES256          (ansible vault header)
@@ -169,19 +173,19 @@ GitHub.Diff = class {
     const files = $('#files .file.js-file');
 
     $.each(files, (idx,file) => {
-      const context = $(file).find('.blob-code-context:first').text().trim();
+      const context = $(file).find('span.blob-code-inner:first').text().trim();
       const file_header = $(file).find('.file-header');
       const file_name = $(file_header).attr('data-path');
       const file_anchor = $(file_header).attr('data-anchor');
 
-      if (context === "$ANSIBLE_VAULT;1.1;AES256" && !$('#' + file_anchor + '-decryptbtn').length) {
+      if (context.match(/^[ -+]?\$ANSIBLE_VAULT;.+AES256$/) && !$('#' + file_anchor + '-decryptbtn').length) {
         // hide the unified|split menu since this doesn't work in split mode
         $(".diffbar-item .BtnGroup").hide();
 
         const container = $(file).find('table.diff-table');
         const original = container.html();
-        const deletions = AnsibleVaultDecryptor.sanitize($(file).find('.blob-code-deletion')).replace(/-/g, '');
-        const additions = AnsibleVaultDecryptor.sanitize($(file).find('.blob-code-addition')).replace(/\+/g, '');
+        const deletions = GitHub.Diff._readLines($(file).find('.blob-code-deletion'), /-/g);
+        const additions = GitHub.Diff._readLines($(file).find('.blob-code-addition'), /\+/g);
 
         // // attempt to auto-decrypt if auto-decrypt enabled
         AnsibleVaultDecryptor.if_auto_decrypt(function() {
