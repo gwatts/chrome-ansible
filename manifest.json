@@ -1,7 +1,7 @@
 {
    "manifest_version": 2,
    "name": "Ansible Vault Decryptor",
-   "version": "1.1.1",
+   "version": "1.1.2",
    "description": "Decrypts Ansible vaults on github.com and caches passwords in memory",
    "author": "Gareth Watts",
    "homepage_url": "https://gwatts.com/chrome-ansible",
