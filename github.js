@@ -229,9 +229,63 @@ GitHub.Diff = class {
   }
 };
 
+GitHub.Yaml = class {
+  static detect() {
+    const path = $('.final-path').text()
+    const is_yaml = path.match(new RegExp('.*\.ya?ml$'))
+    if(is_yaml) {
+      const lines = Array.from($('.blob-code-inner')).map((e) => e.textContent)
+      const vault_lines = lines.reduce((a, l, i) =>(l.includes('!vault')) ? a.concat(i+1) : a, [])
+      const lines_to_decrypt = vault_lines.map((i) => {
+        const start = i + 1
+        const indent = lines[start].search(/\S/);
+        const end = start + lines.slice(start).findIndex((l) => l.search(/\S/) < indent)
+
+        const text_to_decrypt = lines.slice(start, end).map((l) => l.trim()).join('')
+        return { start, end, text_to_decrypt }
+      })
+
+      observer.disconnect() // to prevent detect() being called again when replace happens
+
+      // attempt to auto-decrypt if auto-decrypt enabled
+      AnsibleVaultDecryptor.if_auto_decrypt(function() {
+        // https://stackoverflow.com/a/43082995/21115
+        GitHub.Yaml.decryptAndRenderLines(lines_to_decrypt, false)
+      })
+
+      const raw_url = $('#raw-url');
+      const btn_group = raw_url.parent();
+      const btn_class = raw_url.attr('class');
+
+      if (btn_group) {
+        $('<a class="minibutton" id="decryptbtn">Decrypt</a>').prependTo(btn_group).click(function() {
+          GitHub.Yaml.decryptAndRenderLines(lines_to_decrypt, true)
+        }).attr('class', btn_class);
+      }
+    }
+  }
+
+  static renderHtml (start, end, text) {
+    $('#LC' + (start-1)).append(`&nbsp<span style="user-select:all">${text}</span>`)
+    Array.from({ length: end - start + 1 }, (_, i) => $('#LC' + (start+i)).parent().remove())
+  }
+
+  static decryptAndRender ({start, end, text_to_decrypt}, prompt_on_fail) {
+    return AnsibleVaultDecryptor.do_decrypt_async(text_to_decrypt, null, prompt_on_fail).then((text) => {
+      GitHub.Yaml.renderHtml(start, end, text)
+    })
+  }
+
+  static decryptAndRenderLines (lines_to_decrypt, prompt_on_fail) { 
+    // Use sequential promises so we wait for password prompt on the first one
+    lines_to_decrypt.reduce((p, line) => p.then(_ => GitHub.Yaml.decryptAndRender(line, prompt_on_fail)), Promise.resolve())
+  }
+}
+
 GitHub.Scan = function() {
   GitHub.Blob.detect();
   GitHub.Diff.detect();
+  GitHub.Yaml.detect();
 };
 
 // Github dynamically loads page fragments when switching between blobs instead of doing

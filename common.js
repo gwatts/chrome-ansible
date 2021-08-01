@@ -85,6 +85,12 @@ let AnsibleVaultDecryptor = {
       });
     }
   },
+
+  do_decrypt_async: function(textToDecrypt, password, prompt_on_fail) {
+    return new Promise((resolve, _) => {
+      AnsibleVaultDecryptor.do_decrypt(textToDecrypt, password, prompt_on_fail, resolve);
+    });
+  }
 };
 
 // See https://gist.github.com/samgiles/762ee337dff48623e729
